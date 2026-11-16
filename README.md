@@ -7,7 +7,7 @@ surface shows the exact months the archive holds for it, staleness badges mark h
 the most recent archived month is, and data-quality warning signs are flagged instead of
 hidden.
 
-![Station detail: one month of daily PM2.5 at Karve Road Pune, with the India 24h threshold and quality flags](docs/screenshot.png)
+<img width="1280" alt="Station detail view: one month of daily PM2.5 at Karve Road Pune with the India 24-hour threshold, per-day coverage, and quality flags" src="https://github.com/user-attachments/assets/c83d0ef0-5e42-4a84-a1d6-f5b4ed7d0338">
 
 ## What it does
 
