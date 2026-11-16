@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Air Quality Archive Explorer</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #12181f; --panel2: #18222c; --line: #243040;
+    --text: #e8eef4; --muted: #8fa1b3; --accent: #4fb3ff; --amber: #f0b429;
+    --green: #3fb96f; --red: #e5534b;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 18px 64px; }
+  header h1 { font-size: 24px; font-weight: 650; letter-spacing: .2px; }
+  .sub { color: var(--muted); margin-top: 6px; max-width: 720px; }
+  .banner { margin: 18px 0; padding: 10px 14px; border: 1px solid var(--line);
+            border-left: 3px solid var(--amber); border-radius: 8px;
+            background: var(--panel); color: var(--muted); font-size: 13.5px; }
+  .banner b { color: var(--text); font-weight: 600; }
+  .controls { display: flex; gap: 10px; margin: 18px 0; flex-wrap: wrap; }
+  input[type=search], select { background: var(--panel2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: 14px; }
+  input[type=search] { flex: 1; min-width: 220px; }
+  button { background: var(--accent); color: #062032; border: 0; border-radius: 8px;
+           padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .grid { display: grid; gap: 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+          padding: 13px 15px; cursor: pointer; }
+  .card:hover { border-color: var(--accent); }
+  .card h3 { font-size: 15.5px; font-weight: 600; }
+  .card .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px;
+           margin-left: 8px; vertical-align: 2px; }
+  .b-ok { background: rgba(63,185,111,.15); color: var(--green); }
+  .b-stale { background: rgba(240,180,41,.15); color: var(--amber); }
+  .b-old { background: rgba(229,83,75,.15); color: var(--red); }
+  #detail { margin-top: 26px; display: none; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+           padding: 18px; }
+  .kv { color: var(--muted); font-size: 13.5px; margin: 3px 0; }
+  .kv b { color: var(--text); font-weight: 600; }
+  canvas { width: 100%; height: 260px; margin-top: 14px; background: var(--panel2);
+           border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  .exc { color: var(--red); font-weight: 600; }
+  .sus { color: var(--amber); }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12.5px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  #status { color: var(--muted); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Air Quality Archive Explorer</h1>
+    <p class="sub">Browse historical air-quality records from the OpenAQ open-data archive,
+       station by station, with each station's actual data coverage shown up front.</p>
+  </header>
+
+  <div class="banner"><b>Historical data, honestly labeled.</b> This tool reads the OpenAQ
+    archive of past measurements. It does not show live or current conditions. Every station
+    lists the exact months the archive holds for it, and badges mark how stale the most
+    recent archived month is.</div>
+
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search station or city (e.g. Pune, Bangkok)">
+    <button id="searchBtn">Search</button>
+  </div>
+  <div id="status"></div>
+  <div id="list" class="grid"></div>
+
+  <div id="detail">
+    <div class="panel">
+      <h2 id="dName"></h2>
+      <div class="kv" id="dMeta"></div>
+      <div class="kv" id="dCov"></div>
+      <div class="kv" id="dSrc"></div>
+      <div class="row">
+        <select id="dMonth"></select>
+        <select id="dParam"></select>
+        <select id="dStd"></select>
+        <button id="loadBtn">Load month</button>
+      </div>
+      <canvas id="chart" width="940" height="260"></canvas>
+      <div id="dSum" class="kv" style="margin-top:10px"></div>
+      <table id="dTable" style="display:none">
+        <thead><tr><th>Date (local)</th><th>Mean</th><th>Min</th><th>Max</th><th>Coverage</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    Source data: <u>OpenAQ open-data archive</u> (AWS Open Data, keyless S3), preserving the
+    original monitoring providers named in each station record. Reference thresholds are
+    24-hour screening levels from the named authorities, not regulatory determinations.
+    Station catalog is a harvested sample of the archive, refreshed periodically.
+  </footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+let stations = [];
+
+function stalenessBadge(lastMonth) {
+  if (!lastMonth) return '<span class="badge b-old">no archive data</span>';
+  const [y, m] = lastMonth.split('-').map(Number);
+  const ageMonths = (new Date().getFullYear() - y) * 12 + (new Date().getMonth() + 1 - m);
+  if (ageMonths <= 2) return '<span class="badge b-ok">through ' + lastMonth + '</span>';
+  if (ageMonths <= 12) return '<span class="badge b-stale">through ' + lastMonth + '</span>';
+  return '<span class="badge b-old">ends ' + lastMonth + '</span>';
+}
+
+async function loadStations(q) {
+  $('status').textContent = 'Loading stations…';
+  const r = await fetch('/api/stations' + (q ? '?q=' + encodeURIComponent(q) : ''));
+  const d = await r.json();
+  stations = d.stations;
+  $('status').textContent = d.count + ' stations in catalog' + (q ? ' matching “' + q + '”' : '');
+  $('list').innerHTML = stations.map((s, i) => `
+    <div class="card" onclick="openStation(${i})">
+      <h3>${esc(s.station || s.name)} ${stalenessBadge(s.last_month)}</h3>
+      <div class="meta">${esc(s.city || '—')} · ${s.parameters.join(', ')} ·
+        coverage ${s.first_month} → ${s.last_month} (${s.n_months} months) ·
+        ${s.lat.toFixed(3)}, ${s.lon.toFixed(3)}</div>
+    </div>`).join('');
+}
+function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+async function openStation(i) {
+  const s = stations[i];
+  $('detail').style.display = 'block';
+  $('dName').textContent = s.name;
+  $('dMeta').textContent = `Provider tag: ${s.provider || '—'} · Coordinates ${s.lat}, ${s.lon}`;
+  $('dSrc').textContent = '';
+  $('dCov').textContent = 'Checking live archive coverage…';
+  $('dTable').style.display = 'none';
+  $('dSum').textContent = '';
+  const cov = await (await fetch(`/api/station/${s.location_id}/coverage`)).json();
+  $('dCov').innerHTML = `<b>Archive coverage: ${cov.window}</b> (${cov.n_months} months with records)`;
+  $('dMonth').innerHTML = cov.months.slice().reverse()
+    .map(m => `<option>${m}</option>`).join('');
+  $('dParam').innerHTML = s.parameters.map(p => `<option ${p==='pm25'?'selected':''}>${p}</option>`).join('');
+  const std = await (await fetch('/api/standards')).json();
+  $('dStd').innerHTML = Object.entries(std)
+    .map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('');
+  $('loadBtn').onclick = () => loadMonth(s.location_id);
+  $('detail').scrollIntoView({behavior:'smooth'});
+}
+
+async function loadMonth(lid) {
+  const [y, m] = $('dMonth').value.split('-').map(Number);
+  const param = $('dParam').value, stdKey = $('dStd').value;
+  $('dSum').textContent = 'Fetching daily records from the archive (this reads ~30 files)…';
+  const d = await (await fetch(
+    `/api/station/${lid}/month/${y}/${m}?parameter=${param}&standard=${stdKey}`)).json();
+  drawChart(d.days, d.standard ? d.standard.threshold : null);
+  const thin = d.days.filter(x => x.coverage < 2/3).length;
+  $('dSum').innerHTML =
+    `<b>${d.n_days}</b> local days · <b class="exc">${d.n_exceedance}</b> days above ` +
+    `${d.standard.threshold} ${d.standard.units} (${esc(d.standard.label)}) among ` +
+    `${d.n_valid_days} days with ≥2/3 coverage` +
+    (thin ? ` · ${thin} thin day(s) excluded from exceedance counting` : '') +
+    (d.n_suspect ? ` · <b style="color:var(--amber)">${d.n_suspect} suspect day(s): one constant reading all day - a stuck-sensor sign` +
+     (d.n_suspect_exceedance ? ` (${d.n_suspect_exceedance} of them counted above the threshold)` : '') + '</b>' : '') +
+    (() => { const sp = d.days.filter(x => x.vmax > 1000).length;
+      return sp ? ` · <b style="color:var(--amber)">${sp} day(s) peak above 1000 ${esc(d.days[0]?.units || 'µg/m³')} - beyond standard AQI scales, likely sensor faults, shown as archived</b>` : ''; })() +
+    `<br>Threshold source: ${esc(d.standard.source)}`;
+  const tb = $('dTable').querySelector('tbody');
+  tb.innerHTML = d.days.map(x => `
+    <tr class="${x.suspect ? 'sus' : (x.coverage >= 2/3 && x.mean > (d.standard?.threshold ?? 1e9) ? 'exc' : '')}">
+      <td>${x.date}${x.suspect ? ' ⚠' : ''}</td><td>${x.mean.toFixed(1)}</td><td>${x.vmin.toFixed(1)}</td>
+      <td>${x.vmax.toFixed(1)}</td><td>${(x.coverage*100).toFixed(0)}%</td></tr>`).join('');
+  $('dTable').style.display = 'table';
+}
+
+function drawChart(days, threshold) {
+  const c = $('chart'), ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (!days.length) return;
+  const pad = {l: 44, r: 10, t: 12, b: 24};
+  const W = c.width - pad.l - pad.r, H = c.height - pad.t - pad.b;
+  const vmax = Math.max(threshold || 0, ...days.map(d => d.vmax)) * 1.08;
+  ctx.strokeStyle = '#243040'; ctx.fillStyle = '#8fa1b3'; ctx.font = '11px sans-serif';
+  for (let i = 0; i <= 4; i++) {
+    const v = vmax * i / 4, y = pad.t + H - H * i / 4;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + W, y); ctx.stroke();
+    ctx.fillText(v.toFixed(0), 6, y + 4);
+  }
+  const bw = Math.max(2, W / days.length - 3);
+  days.forEach((d, i) => {
+    const x = pad.l + i * W / days.length;
+    const h = H * d.mean / vmax;
+    const hot = threshold && d.coverage >= 2/3 && d.mean > threshold;
+    ctx.fillStyle = d.suspect ? '#f0b429' : (hot ? '#e5534b' : (d.coverage < 2/3 ? '#3a4a5c' : '#4fb3ff'));
+    ctx.fillRect(x, pad.t + H - h, bw, h);
+    if (days.length <= 31 && i % Math.ceil(days.length / 16) === 0)
+      ctx.fillStyle = '#8fa1b3', ctx.fillText(d.date.slice(8), x, pad.t + H + 15);
+  });
+  if (threshold) {
+    const y = pad.t + H - H * threshold / vmax;
+    ctx.strokeStyle = '#f0b429'; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + W, y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+$('searchBtn').onclick = () => loadStations($('q').value.trim());
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') loadStations($('q').value.trim()); });
+
+// Deep links: #station=<id> opens that station and loads its latest month,
+// so a station view is shareable.
+async function boot() {
+  await loadStations('');
+  const m = location.hash.match(/station=(\d+)/);
+  if (!m) return;
+  const lid = Number(m[1]);
+  let i = stations.findIndex(s => s.location_id === lid);
+  if (i < 0) {
+    // not in the catalog sample: fetch coverage directly and synthesize a card
+    const cov = await (await fetch(`/api/station/${lid}/coverage`)).json();
+    if (!cov.n_months) { $('status').textContent = `No archive records for location ${lid}.`; return; }
+    stations.push({location_id: lid, name: `Location ${lid}`, station: `Location ${lid}`,
+      city: '', provider: '', lat: 0, lon: 0, parameters: ['pm25'],
+      first_month: cov.months[0], last_month: cov.months[cov.months.length-1],
+      n_months: cov.n_months});
+    i = stations.length - 1;
+  }
+  // deep link: the shared station view leads with the detail panel
+  $('list').style.display = 'none';
+  $('status').textContent = '';
+  await openStation(i);
+  const mm = location.hash.match(/month=(\d{4})-(\d{2})/);
+  if (mm) {
+    const want = `${mm[1]}-${mm[2]}`;
+    const sel = $('dMonth');
+    if ([...sel.options].some(o => o.value === want)) sel.value = want;
+  }
+  await loadMonth(lid);
+}
+boot();
+</script>
+</body>
+</html>
