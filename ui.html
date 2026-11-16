@@ -180,27 +180,41 @@ async function loadMonth(lid) {
   $('dTable').style.display = 'table';
 }
 
+let chartState = { days: [], threshold: null };
+
 function drawChart(days, threshold) {
+  chartState = { days, threshold };
   const c = $('chart'), ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, c.width, c.height);
+  // Size the canvas buffer to its displayed size (times devicePixelRatio) so
+  // text and bars stay crisp and readable at any width, phone included.
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = c.clientWidth || 940, cssH = c.clientHeight || 260;
+  const pw = Math.max(1, Math.round(cssW * dpr)), ph = Math.max(1, Math.round(cssH * dpr));
+  if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
   if (!days.length) return;
-  const pad = {l: 44, r: 10, t: 12, b: 24};
-  const W = c.width - pad.l - pad.r, H = c.height - pad.t - pad.b;
+  const pad = {l: 40, r: 8, t: 12, b: 22};
+  const W = cssW - pad.l - pad.r, H = cssH - pad.t - pad.b;
   const vmax = Math.max(threshold || 0, ...days.map(d => d.vmax)) * 1.08;
   ctx.strokeStyle = '#243040'; ctx.fillStyle = '#8fa1b3'; ctx.font = '11px sans-serif';
   for (let i = 0; i <= 4; i++) {
     const v = vmax * i / 4, y = pad.t + H - H * i / 4;
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + W, y); ctx.stroke();
-    ctx.fillText(v.toFixed(0), 6, y + 4);
+    ctx.textAlign = 'right';
+    ctx.fillText(v.toFixed(0), pad.l - 6, y + 4);
+    ctx.textAlign = 'left';
   }
   const bw = Math.max(2, W / days.length - 3);
+  // Thin the day labels to what fits without overlap (about one per 34px).
+  const step = Math.max(1, Math.ceil(days.length / Math.max(4, Math.floor(W / 34))));
   days.forEach((d, i) => {
     const x = pad.l + i * W / days.length;
     const h = H * d.mean / vmax;
     const hot = threshold && d.coverage >= 2/3 && d.mean > threshold;
     ctx.fillStyle = d.suspect ? '#f0b429' : (hot ? '#e5534b' : (d.coverage < 2/3 ? '#3a4a5c' : '#4fb3ff'));
     ctx.fillRect(x, pad.t + H - h, bw, h);
-    if (days.length <= 31 && i % Math.ceil(days.length / 16) === 0)
+    if (i % step === 0)
       ctx.fillStyle = '#8fa1b3', ctx.fillText(d.date.slice(8), x, pad.t + H + 15);
   });
   if (threshold) {
@@ -210,6 +224,8 @@ function drawChart(days, threshold) {
     ctx.setLineDash([]);
   }
 }
+
+window.addEventListener('resize', () => drawChart(chartState.days, chartState.threshold));
 
 $('searchBtn').onclick = () => loadStations($('q').value.trim());
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') loadStations($('q').value.trim()); });
