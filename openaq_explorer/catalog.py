@@ -10,6 +10,7 @@ sample of the archive, not a complete directory.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, asdict, field
 
@@ -95,7 +96,10 @@ def _list_days(location_id: int, year: int, month: int) -> list[int]:
     return sorted(days)
 
 
-def save_catalog(stations: list[Station], path: str, harvested_on: str) -> None:
+PART_SIZE = 800  # stations per catalog file part
+
+
+def _payload(stations, harvested_on, extra=None):
     payload = {
         "source": "OpenAQ open-data archive (S3), keyless; v3 API not used (requires key)",
         "harvested_on": harvested_on,
@@ -103,15 +107,41 @@ def save_catalog(stations: list[Station], path: str, harvested_on: str) -> None:
                  "reflect the archive at harvest time; re-probe for current coverage."),
         "stations": [s.to_json() for s in stations],
     }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def save_catalog(stations: list[Station], path: str, harvested_on: str) -> None:
+    """Write the catalog, splitting into sibling part files past PART_SIZE.
+
+    The primary file lists any extra parts under "additional_parts" so
+    load_catalog can reassemble the full list. Parts keep the repo's
+    per-file sizes manageable for the GitHub web editor.
+    """
+    parts = [stations[i:i + PART_SIZE] for i in range(0, max(1, len(stations)), PART_SIZE)]
+    base, ext = os.path.splitext(path)
+    names = [os.path.basename(path)] + [f"{os.path.basename(base)}-{i}{ext}" for i in range(2, len(parts) + 1)]
+    # remove stale part files from an earlier, larger catalog
+    i = len(parts) + 1
+    while os.path.exists(f"{base}-{i}{ext}"):
+        os.remove(f"{base}-{i}{ext}")
+        i += 1
+    for name, chunk in zip(names, parts):
+        extra = {"additional_parts": names[1:]} if name == names[0] and len(names) > 1 else None
+        with open(os.path.join(os.path.dirname(path), name), "w", encoding="utf-8") as f:
+            json.dump(_payload(chunk, harvested_on, extra), f, separators=(",", ":"), ensure_ascii=False)
 
 
 def load_catalog(path: str) -> list[Station]:
     with open(path, encoding="utf-8") as f:
         payload = json.load(f)
+    raw = list(payload["stations"])
+    for part in payload.get("additional_parts", []):
+        with open(os.path.join(os.path.dirname(path), part), encoding="utf-8") as f:
+            raw.extend(json.load(f)["stations"])
     out = []
-    for d in payload["stations"]:
+    for d in raw:
         d = dict(d)
         out.append(Station(**d))
     return out
