@@ -42,7 +42,11 @@ def api_stations():
         if q and q not in s.name.lower() and q not in s.city.lower():
             continue
         out.append(s.to_json())
-    return jsonify({"count": len(out), "stations": out})
+    total = len(out)
+    # Cap listings so the landing page stays light on big catalogs; a search
+    # query is how you reach stations beyond the first page.
+    limit = min(total, 200) if q else min(total, 60)
+    return jsonify({"count": total, "shown": limit, "stations": out[:limit]})
 
 
 @app.get("/api/station/<int:lid>/coverage")
