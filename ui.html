@@ -122,7 +122,11 @@ async function loadStations(q) {
   const r = await fetch('/api/stations' + (q ? '?q=' + encodeURIComponent(q) : ''));
   const d = await r.json();
   stations = d.stations;
-  $('status').textContent = d.count + ' stations in catalog' + (q ? ' matching “' + q + '”' : '');
+  $('status').textContent = q
+    ? (d.shown < d.count ? `Showing ${d.shown} of ${d.count}` : `${d.count}`) + ` stations matching “${q}”`
+    : (d.shown < d.count
+       ? `Showing ${d.shown} of ${d.count} stations in catalog - search to narrow`
+       : `${d.count} stations in catalog`);
   $('list').innerHTML = stations.map((s, i) => `
     <div class="card" onclick="openStation(${i})">
       <h3>${esc(s.station || s.name)} ${stalenessBadge(s.last_month)}</h3>
