@@ -41,7 +41,8 @@ The OpenAQ v3 REST API requires an API key (it answers 401 without one). The
 [open-data archive on S3](https://openaq-data-archive.s3.amazonaws.com) is part of the
 AWS Open Data program and needs no credentials, so this tool - including its station
 catalog - is built entirely from keyless archive listings and object reads. The shipped
-catalog (`data/catalog.json`, 73 stations across 65 cities, harvested 2026-11-16) is a
+catalog (`data/catalog.json` plus its listed part file, 1573 unique stations across
+141 named cities, harvested 2026-11-19) is a
 **sample** of the archive, not a complete directory; re-probe any location id live, or
 regenerate a bigger sample with the bootstrap script.
 
