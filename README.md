@@ -69,14 +69,30 @@ python app.py          # http://localhost:5000
 Tests (no network needed):
 
 ```bash
-python -m pytest tests/ -q     # 10 tests
+python -m pytest tests/ -q     # 17 tests
 ```
 
 Regenerate or enlarge the station catalog (reads only the keyless archive):
 
 ```bash
 python scripts/bootstrap_catalog.py --sample 400 --seed 7
+# Resume with the same seed-ID list and a persistent checkpoint:
+python scripts/bootstrap_catalog.py --resume --sample 300 --seed 42 \
+  --ids-file ../location_ids.json --checkpoint ../harvest_checkpoint.json
 ```
+
+Supply a JSON array of location IDs with `--ids-file`; the seed list and checkpoint
+are local inputs, not bundled with the repository. The summary distinguishes
+accepted PM probes, unique stations added, existing stations refreshed, duplicate
+results, empty responses, non-PM locations and retryable failures. Transient probe
+errors stay out of the checkpoint so a later resume retries them. Empty responses
+and non-PM locations are checkpointed; use a new checkpoint to recheck those later.
+Seed IDs are normalized to integers and deduplicated before sampling.
+
+The checkpoint is saved after a completed batch, not after every request. An
+interrupted batch is re-probed on resume. Checkpoints created by older versions
+may already contain failed IDs; the new retry behavior cannot identify those
+retroactively. Start with a fresh checkpoint if that matters for your harvest.
 
 ## How it works
 
