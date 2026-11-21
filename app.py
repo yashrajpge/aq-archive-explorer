@@ -70,6 +70,18 @@ def api_month(lid: int, year: int, month: int):
     """
     param = request.args.get("parameter", "pm25")
     standard = request.args.get("standard")
+    # Reject invalid comparisons before doing any archive requests.
+    if not (1 <= year <= 9999 and 1 <= month <= 12):
+        return jsonify(error="year must be 1-9999 and month must be 1-12"), 400
+    st = None
+    if standard:
+        try:
+            st = standards.get(standard)
+        except KeyError:
+            return jsonify(error="unknown standard", choices=sorted(standards.STANDARDS)), 400
+        if st["parameter"] != param:
+            return jsonify(error="standard does not match requested parameter",
+                           parameter=param, standard_parameter=st["parameter"]), 400
     rows = []
     import calendar as cal
     for day in range(1, cal.monthrange(year, month)[1] + 1):
@@ -81,8 +93,7 @@ def api_month(lid: int, year: int, month: int):
         "n_days": len(stats),
     }
     out["n_suspect"] = sum(1 for s in stats if s.suspect)
-    if standard:
-        st = standards.get(standard)
+    if st is not None:
         exc = aggregate.exceedance_days(stats, st["threshold"])
         out["standard"] = st
         out["exceedance_days"] = [s.date for s in exc]
