@@ -69,7 +69,7 @@ python app.py          # http://localhost:5000
 Tests (no network needed):
 
 ```bash
-python -m pytest tests/ -q     # 17 tests
+python -m pytest tests/ -q     # 30 tests
 ```
 
 Regenerate or enlarge the station catalog (reads only the keyless archive):
@@ -93,6 +93,18 @@ The checkpoint is saved after a completed batch, not after every request. An
 interrupted batch is re-probed on resume. Checkpoints created by older versions
 may already contain failed IDs; the new retry behavior cannot identify those
 retroactively. Start with a fresh checkpoint if that matters for your harvest.
+
+## Pollutant-safe reference comparisons
+
+The month view only offers reference levels matching the selected parameter.
+Changing parameters clears the previous chart and summary; a result still loading
+for the previous selection is ignored. Parameters without a reference level show
+an explanation rather than a comparison against another pollutant's threshold.
+
+The API independently rejects a mismatched parameter/standard pair, unknown
+standard, or invalid year/month with JSON and HTTP 400 before fetching day files.
+Omitting `standard` still allows raw daily summaries without exceedance counts.
+The offline tests include both PM2.5 and PM10 comparisons and leap-year dates.
 
 ## How it works
 
