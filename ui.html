@@ -137,7 +137,10 @@ async function loadStations(q) {
 }
 function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 
+let monthRequest = 0;
+
 async function openStation(i) {
+  ++monthRequest;
   const s = stations[i];
   $('detail').style.display = 'block';
   $('dName').textContent = s.name;
@@ -152,18 +155,40 @@ async function openStation(i) {
     .map(m => `<option>${m}</option>`).join('');
   $('dParam').innerHTML = s.parameters.map(p => `<option ${p==='pm25'?'selected':''}>${p}</option>`).join('');
   const std = await (await fetch('/api/standards')).json();
-  $('dStd').innerHTML = Object.entries(std)
-    .map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('');
+  const updateStandards = () => {
+    ++monthRequest;
+    const previous = $('dStd').value;
+    $('dStd').innerHTML = Object.entries(std)
+      .filter(([k,v]) => v.parameter === $('dParam').value)
+      .map(([k,v]) => `<option value="${k}">${esc(v.label)}</option>`).join('');
+    if ([...$('dStd').options].some(o => o.value === previous)) $('dStd').value = previous;
+    $('loadBtn').disabled = !$('dStd').options.length || !cov.months.length;
+    // Never leave an earlier pollutant's chart/summary under new controls.
+    $('dTable').style.display = 'none';
+    $('dSum').textContent = $('dStd').options.length ? '' : 'No reference level for this parameter.';
+    drawChart([], null);
+  };
+  $('dParam').onchange = updateStandards;
+  updateStandards();
   $('loadBtn').onclick = () => loadMonth(s.location_id);
   $('detail').scrollIntoView({behavior:'smooth'});
 }
 
 async function loadMonth(lid) {
+  const currentRequest = ++monthRequest;
   const [y, m] = $('dMonth').value.split('-').map(Number);
   const param = $('dParam').value, stdKey = $('dStd').value;
   $('dSum').textContent = 'Fetching daily records from the archive (this reads ~30 files)…';
-  const d = await (await fetch(
-    `/api/station/${lid}/month/${y}/${m}?parameter=${param}&standard=${stdKey}`)).json();
+  const response = await fetch(
+    `/api/station/${lid}/month/${y}/${m}?parameter=${encodeURIComponent(param)}&standard=${encodeURIComponent(stdKey)}`);
+  const d = await response.json();
+  if (currentRequest !== monthRequest) return;
+  if (!response.ok) {
+    $('dSum').textContent = d.error || 'Could not load this month.';
+    $('dTable').style.display = 'none';
+    drawChart([], null);
+    return;
+  }
   drawChart(d.days, d.standard ? d.standard.threshold : null);
   const thin = d.days.filter(x => x.coverage < 2/3).length;
   $('dSum').innerHTML =
