@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import gzip
 import io
+import math
+from datetime import datetime
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -104,23 +106,43 @@ def fetch_day(location_id: int, year: int, month: int, day: int) -> list[dict]:
 
 
 def parse_day_csv(text: str) -> list[dict]:
-    """Parse the archive day CSV. Defensive: skips malformed lines."""
+    """Parse archive rows, skipping malformed or non-finite records.
+
+    Require a timezone-aware ISO timestamp and finite values/coordinates.
+    Preserve the local date and offset; do not convert timestamps to UTC.
+    Negative finite measurements remain visible, not silently clipped.
+    """
     import csv
     rows = []
     reader = csv.DictReader(io.StringIO(text))
     for r in reader:
         try:
+            timestamp = r["datetime"].strip()
+            # Python 3.10 does not accept Z, so normalize only its spelling.
+            timestamp = timestamp[:-1] + "+00:00" if timestamp.endswith("Z") else timestamp
+            parsed = datetime.fromisoformat(timestamp)
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                continue
+            value, lat, lon = float(r["value"]), float(r["lat"]), float(r["lon"])
+            if not all(math.isfinite(v) for v in (value, lat, lon)):
+                continue
+            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                continue
+            location_id = int(r["location_id"])
+            parameter, units = r["parameter"].strip(), r["units"].strip()
+            if location_id <= 0 or not parameter or not units:
+                continue
             rows.append({
-                "location_id": int(r["location_id"]),
+                "location_id": location_id,
                 "location": r["location"],
-                "datetime": r["datetime"],
-                "lat": float(r["lat"]),
-                "lon": float(r["lon"]),
-                "parameter": r["parameter"],
-                "units": r["units"],
-                "value": float(r["value"]),
+                "datetime": parsed.isoformat(),
+                "lat": lat,
+                "lon": lon,
+                "parameter": parameter,
+                "units": units,
+                "value": value,
             })
-        except (KeyError, ValueError, TypeError):
+        except (KeyError, ValueError, TypeError, AttributeError, OverflowError):
             continue
     return rows
 
