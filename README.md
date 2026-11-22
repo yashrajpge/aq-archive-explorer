@@ -69,7 +69,7 @@ python app.py          # http://localhost:5000
 Tests (no network needed):
 
 ```bash
-python -m pytest tests/ -q     # 30 tests
+python -m pytest tests/ -q     # 48 tests
 ```
 
 Regenerate or enlarge the station catalog (reads only the keyless archive):
@@ -105,6 +105,19 @@ The API independently rejects a mismatched parameter/standard pair, unknown
 standard, or invalid year/month with JSON and HTTP 400 before fetching day files.
 Omitting `standard` still allows raw daily summaries without exceedance counts.
 The offline tests include both PM2.5 and PM10 comparisons and leap-year dates.
+
+## Archive row validation
+
+The CSV parser skips malformed rows, non-finite measurements (`NaN` or infinity),
+non-finite/out-of-range coordinates, non-positive location IDs, empty parameters
+or units, and timestamps without a valid date and explicit timezone. UTC `Z`
+is normalized to `+00:00`; other offsets and their local dates are preserved.
+Finite negative measurements are retained as archived, not clipped to zero.
+
+These checks prevent invalid records from poisoning daily means or coverage.
+They do not certify sensor accuracy, correct units, or complete data. Rejected-row
+counts are not yet exposed in the UI, so a lower sample count can reflect both
+missing archive records and rows rejected by validation.
 
 ## How it works
 
