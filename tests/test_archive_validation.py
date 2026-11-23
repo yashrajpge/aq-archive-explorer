@@ -35,6 +35,8 @@ def csv_text(*records):
 ])
 def test_invalid_record_skipped_without_losing_valid_neighbor(field, value):
     rows = parse_day_csv(csv_text({field: value}, {}))
+    from openaq_explorer.s3archive import parse_day_csv_counted
+    assert parse_day_csv_counted(csv_text({field: value}, {}))[1] == 1
     assert len(rows) == 1
     assert rows[0]["value"] == 12.5
     stats = aggregate.daily_stats(rows)
@@ -66,3 +68,32 @@ def test_invalid_rows_do_not_create_exceedances_or_coverage():
     assert len(stats) == 1 and stats[0].n_samples == 24
     assert stats[0].mean == 20 and stats[0].coverage == 1
     assert aggregate.exceedance_days(stats, 35) == []
+
+
+def test_counted_parse_reports_rejections_and_wrapper_matches():
+    from openaq_explorer.s3archive import parse_day_csv_counted
+    text = csv_text({}, {"value": "NaN"}, {"datetime": "bad"}, {"lat": "99"}, {})
+    rows, rejected = parse_day_csv_counted(text)
+    assert len(rows) == 2 and rejected == 3
+    assert parse_day_csv(text) == rows
+    assert parse_day_csv_counted(csv_text({}))[1] == 0
+
+
+def test_counted_fetch_and_list_wrapper(monkeypatch):
+    import gzip
+    from openaq_explorer import s3archive
+    monkeypatch.setattr(s3archive, "_get", lambda url: gzip.compress(
+        csv_text({}, {"value": "NaN"}).encode("utf-8")))
+    rows, rejected = s3archive.fetch_day_counted(1, 2025, 3, 1)
+    assert len(rows) == 1 and rejected == 1
+    assert s3archive.fetch_day(1, 2025, 3, 1) == rows
+
+
+def test_missing_file_is_not_a_rejected_row(monkeypatch):
+    import urllib.error
+    from openaq_explorer import s3archive
+    def missing(url):
+        raise urllib.error.HTTPError(url, 404, "missing", {}, None)
+    monkeypatch.setattr(s3archive, "_get", missing)
+    assert s3archive.fetch_day_counted(1, 2025, 3, 1) == ([], 0)
+    assert s3archive.fetch_day(1, 2025, 3, 1) == []
