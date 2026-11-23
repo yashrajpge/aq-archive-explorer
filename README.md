@@ -69,7 +69,7 @@ python app.py          # http://localhost:5000
 Tests (no network needed):
 
 ```bash
-python -m pytest tests/ -q     # 48 tests
+python -m pytest tests/ -q     # 52 tests
 ```
 
 Regenerate or enlarge the station catalog (reads only the keyless archive):
@@ -115,9 +115,11 @@ is normalized to `+00:00`; other offsets and their local dates are preserved.
 Finite negative measurements are retained as archived, not clipped to zero.
 
 These checks prevent invalid records from poisoning daily means or coverage.
-They do not certify sensor accuracy, correct units, or complete data. Rejected-row
-counts are not yet exposed in the UI, so a lower sample count can reflect both
-missing archive records and rows rejected by validation.
+They do not certify sensor accuracy, correct units, or complete data. The month
+API returns `n_rejected_rows` and the UI warns when it is non-zero. The count
+covers every parameter in that month's files, not only the selected one.
+A lower sample count can still reflect missing archive records as well as
+rejected rows; missing files are not counted as rejected rows.
 
 ## How it works
 
