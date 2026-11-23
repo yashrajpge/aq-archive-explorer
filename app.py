@@ -82,15 +82,19 @@ def api_month(lid: int, year: int, month: int):
         if st["parameter"] != param:
             return jsonify(error="standard does not match requested parameter",
                            parameter=param, standard_parameter=st["parameter"]), 400
-    rows = []
+    rows, rejected = [], 0
     import calendar as cal
     for day in range(1, cal.monthrange(year, month)[1] + 1):
-        rows.extend(s3archive.fetch_day(lid, year, month, day))
+        day_rows, day_rejected = s3archive.fetch_day_counted(lid, year, month, day)
+        rows.extend(day_rows)
+        rejected += day_rejected
     stats = [s for s in aggregate.daily_stats(rows) if s.parameter == param]
     out = {
         "location_id": lid, "year": year, "month": month, "parameter": param,
         "days": [s.__dict__ for s in stats],
         "n_days": len(stats),
+        # all parameters in the month files, not only the requested one
+        "n_rejected_rows": rejected,
     }
     out["n_suspect"] = sum(1 for s in stats if s.suspect)
     if st is not None:
