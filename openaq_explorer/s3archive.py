@@ -90,8 +90,12 @@ def get_coverage(location_id: int) -> Coverage:
 
 
 def fetch_day(location_id: int, year: int, month: int, day: int) -> list[dict]:
-    """Fetch one day file -> list of row dicts. Returns [] if the file
-    does not exist (S3 404)."""
+    """Valid rows only; see fetch_day_counted for the rejected-row count."""
+    return fetch_day_counted(location_id, year, month, day)[0]
+
+
+def fetch_day_counted(location_id: int, year: int, month: int, day: int) -> tuple[list[dict], int]:
+    """Return (valid rows, rejected row count); a missing file gives ([], 0)."""
     key = (f"records/csv.gz/locationid={location_id}/year={year:04d}/"
            f"month={month:02d}/location-{location_id}-{year:04d}{month:02d}{day:02d}.csv.gz")
     url = f"{BUCKET}/{key}"
@@ -99,13 +103,18 @@ def fetch_day(location_id: int, year: int, month: int, day: int) -> list[dict]:
         raw = _get(url)
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return []
+            return [], 0
         raise
     text = gzip.decompress(raw).decode("utf-8")
-    return parse_day_csv(text)
+    return parse_day_csv_counted(text)
 
 
 def parse_day_csv(text: str) -> list[dict]:
+    """Valid rows only; see parse_day_csv_counted."""
+    return parse_day_csv_counted(text)[0]
+
+
+def parse_day_csv_counted(text: str) -> tuple[list[dict], int]:
     """Parse archive rows, skipping malformed or non-finite records.
 
     Require a timezone-aware ISO timestamp and finite values/coordinates.
@@ -113,7 +122,7 @@ def parse_day_csv(text: str) -> list[dict]:
     Negative finite measurements remain visible, not silently clipped.
     """
     import csv
-    rows = []
+    rows, rejected = [], 0
     reader = csv.DictReader(io.StringIO(text))
     for r in reader:
         try:
@@ -122,15 +131,19 @@ def parse_day_csv(text: str) -> list[dict]:
             timestamp = timestamp[:-1] + "+00:00" if timestamp.endswith("Z") else timestamp
             parsed = datetime.fromisoformat(timestamp)
             if parsed.tzinfo is None or parsed.utcoffset() is None:
+                rejected += 1
                 continue
             value, lat, lon = float(r["value"]), float(r["lat"]), float(r["lon"])
             if not all(math.isfinite(v) for v in (value, lat, lon)):
+                rejected += 1
                 continue
             if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                rejected += 1
                 continue
             location_id = int(r["location_id"])
             parameter, units = r["parameter"].strip(), r["units"].strip()
             if location_id <= 0 or not parameter or not units:
+                rejected += 1
                 continue
             rows.append({
                 "location_id": location_id,
@@ -143,8 +156,9 @@ def parse_day_csv(text: str) -> list[dict]:
                 "value": value,
             })
         except (KeyError, ValueError, TypeError, AttributeError, OverflowError):
+            rejected += 1
             continue
-    return rows
+    return rows, rejected
 
 
 import urllib.parse  # noqa: E402  (kept at bottom to keep the header docs prominent)
