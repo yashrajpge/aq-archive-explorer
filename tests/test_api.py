@@ -12,7 +12,7 @@ import app as web
 def client(monkeypatch):
     def no_network(*args):
         raise AssertionError("invalid request reached archive")
-    monkeypatch.setattr(web.s3archive, "fetch_day", no_network)
+    monkeypatch.setattr(web.s3archive, "fetch_day_counted", no_network)
     return web.app.test_client()
 
 
@@ -43,7 +43,7 @@ def test_matching_parameter_and_threshold(client, monkeypatch, parameter, standa
         return [dict(datetime=f"2024-02-01T{h:02d}:00:00+00:00", parameter=p,
                      units="µg/m³", value=threshold + (1 if p == parameter else 1000))
                 for p in ("pm25", "pm10") for h in range(24)]
-    monkeypatch.setattr(web.s3archive, "fetch_day", fetch)
+    monkeypatch.setattr(web.s3archive, "fetch_day_counted", lambda *a: (fetch(*a), 0))
     response = client.get(f"/api/station/1/month/2024/2?parameter={parameter}&standard={standard}")
     assert response.status_code == 200
     data = response.json
@@ -56,7 +56,14 @@ def test_matching_parameter_and_threshold(client, monkeypatch, parameter, standa
 
 
 def test_no_standard_remains_supported(client, monkeypatch):
-    monkeypatch.setattr(web.s3archive, "fetch_day", lambda *args: [])
+    monkeypatch.setattr(web.s3archive, "fetch_day_counted", lambda *args: ([], 0))
     response = client.get("/api/station/1/month/2025/2?parameter=no2")
     assert response.status_code == 200
     assert response.json["days"] == [] and "standard" not in response.json
+
+
+def test_rejected_rows_summed_across_days(client, monkeypatch):
+    monkeypatch.setattr(web.s3archive, "fetch_day_counted",
+                        lambda lid, y, m, d: ([], 2 if d in (1, 2) else 0))
+    response = client.get("/api/station/1/month/2025/2?parameter=pm25")
+    assert response.json["n_rejected_rows"] == 4
