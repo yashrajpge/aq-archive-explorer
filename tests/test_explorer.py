@@ -1,5 +1,6 @@
 """Unit tests for the explorer engine (no network)."""
 import sys, os
+import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from openaq_explorer import aggregate, catalog, standards
@@ -84,3 +85,22 @@ def test_standards_registry():
         assert False
     except KeyError:
         pass
+
+
+def test_duplicate_timestamps_weight_each_instant_once():
+    rows = [dict(datetime=f"2025-03-01T{h:02d}:00:00+00:00", parameter="pm25",
+                 units="x", value=10.0) for h in range(24)]
+    rows += [dict(rows[0], value=10.0), dict(rows[0], value=10.0),
+             dict(rows[0], value=40.0)]  # three extra rows at 00:00
+    (s,) = aggregate.daily_stats(rows)
+    assert s.n_samples == 24 and s.coverage == 1
+    # 00:00 averages (10+10+10+40)/4 = 17.5; 23 other hours are 10
+    assert s.mean == pytest.approx((17.5 + 230) / 24)
+    assert (s.vmin, s.vmax) == (10.0, 40.0)
+
+
+def test_exact_duplicates_do_not_hide_stuck_sensor_or_change_mean():
+    rows = [dict(datetime=f"2025-03-01T{h:02d}:00:00+00:00", parameter="pm25",
+                 units="x", value=5.0) for h in range(24)] * 2
+    (s,) = aggregate.daily_stats(rows)
+    assert s.mean == 5.0 and s.suspect and s.n_samples == 24
