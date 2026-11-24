@@ -66,7 +66,15 @@ def daily_stats(rows: list[dict], parameter: str | None = None) -> list[DayStat]
     out: list[DayStat] = []
     for (date, param), rs in sorted(groups.items()):
         vals = [r["value"] for r in rs]
-        dts = sorted({r["datetime"] for r in rs})
+        # Weight each timestamp once: repeated rows (re-uploads or parallel
+        # sensors at the same instant) are averaged per timestamp so they
+        # cannot pull the daily mean toward one instant. Min and max still
+        # use every archived value.
+        by_ts: dict[str, list[float]] = {}
+        for r in rs:
+            by_ts.setdefault(r["datetime"], []).append(r["value"])
+        dts = sorted(by_ts)
+        ts_means = [sum(v) / len(v) for v in by_ts.values()]
         exp = expected_samples(dts)
         n = len(dts)
         constant = max(vals) == min(vals)
@@ -74,7 +82,7 @@ def daily_stats(rows: list[dict], parameter: str | None = None) -> list[DayStat]
             date=date, parameter=param, units=rs[0]["units"],
             n_samples=n, expected_samples=exp,
             coverage=min(1.0, n / exp),
-            mean=sum(vals) / len(vals), vmin=min(vals), vmax=max(vals),
+            mean=sum(ts_means) / len(ts_means), vmin=min(vals), vmax=max(vals),
             suspect=constant and n >= 0.9 * exp,
         ))
     return out
