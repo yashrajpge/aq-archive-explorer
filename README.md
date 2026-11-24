@@ -69,7 +69,7 @@ python app.py          # http://localhost:5000
 Tests (no network needed):
 
 ```bash
-python -m pytest tests/ -q     # 52 tests
+python -m pytest tests/ -q     # 54 tests
 ```
 
 Regenerate or enlarge the station catalog (reads only the keyless archive):
@@ -113,6 +113,10 @@ non-finite/out-of-range coordinates, non-positive location IDs, empty parameters
 or units, and timestamps without a valid date and explicit timezone. UTC `Z`
 is normalized to `+00:00`; other offsets and their local dates are preserved.
 Finite negative measurements are retained as archived, not clipped to zero.
+
+Rows sharing one timestamp (re-uploads or parallel sensors) are averaged per
+timestamp, so each instant counts once in the daily mean and coverage; min and
+max still reflect every archived value.
 
 These checks prevent invalid records from poisoning daily means or coverage.
 They do not certify sensor accuracy, correct units, or complete data. The month
