@@ -69,7 +69,7 @@ python app.py          # http://localhost:5000
 Tests (no network needed):
 
 ```bash
-python -m pytest tests/ -q     # 54 tests
+python -m pytest tests/ -q     # 57 tests
 ```
 
 Regenerate or enlarge the station catalog (reads only the keyless archive):
@@ -117,6 +117,11 @@ Finite negative measurements are retained as archived, not clipped to zero.
 Rows sharing one timestamp (re-uploads or parallel sensors) are averaged per
 timestamp, so each instant counts once in the daily mean and coverage; min and
 max still reflect every archived value.
+
+Daily statistics are grouped by units, so values in different units are never
+averaged together. With a reference level selected, only series in that level's
+unit (any spelling of µg/m³) are compared; the month API reports the number of
+day-series left out as `n_days_other_units`.
 
 These checks prevent invalid records from poisoning daily means or coverage.
 They do not certify sensor accuracy, correct units, or complete data. The month
