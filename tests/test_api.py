@@ -67,3 +67,18 @@ def test_rejected_rows_summed_across_days(client, monkeypatch):
                         lambda lid, y, m, d: ([], 2 if d in (1, 2) else 0))
     response = client.get("/api/station/1/month/2025/2?parameter=pm25")
     assert response.json["n_rejected_rows"] == 4
+
+
+def test_other_unit_series_excluded_from_standard_comparison(client, monkeypatch):
+    def fetch(lid, y, m, d):
+        if d != 1:
+            return []
+        return [dict(datetime=f"2025-03-01T{h:02d}:00:00+00:00", parameter="pm25",
+                     units=u, value=v) for u, v in (("µg/m³", 10.0), ("ppm", 500.0))
+                for h in range(24)]
+    monkeypatch.setattr(web.s3archive, "fetch_day_counted", lambda *a: (fetch(*a), 0))
+    r = client.get("/api/station/1/month/2025/3?parameter=pm25&standard=us_24h").json
+    assert r["n_days"] == 1 and r["days"][0]["units"] == "µg/m³"
+    assert r["n_days_other_units"] == 1 and r["n_exceedance"] == 0
+    plain = client.get("/api/station/1/month/2025/3?parameter=pm25").json
+    assert plain["n_days"] == 2 and plain["n_days_other_units"] == 0
