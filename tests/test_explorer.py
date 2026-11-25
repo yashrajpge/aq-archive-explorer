@@ -104,3 +104,22 @@ def test_exact_duplicates_do_not_hide_stuck_sensor_or_change_mean():
                  units="x", value=5.0) for h in range(24)] * 2
     (s,) = aggregate.daily_stats(rows)
     assert s.mean == 5.0 and s.suspect and s.n_samples == 24
+
+
+def _row(h, value, units):
+    return dict(datetime=f"2025-03-01T{h:02d}:00:00+00:00", parameter="pm25",
+                units=units, value=value)
+
+
+def test_different_units_are_never_averaged_together():
+    rows = [_row(h, 10.0, "µg/m³") for h in range(24)]
+    rows += [_row(h, 900.0, "ppm") for h in range(24)]
+    stats = aggregate.daily_stats(rows)
+    assert sorted((s.units, s.mean) for s in stats) == [("ppm", 900.0), ("µg/m³", 10.0)]
+
+
+def test_ugm3_spellings_are_one_unit():
+    rows = [_row(0, 10.0, "µg/m³"), _row(1, 20.0, "ug/m3"), _row(2, 30.0, "μg/m³")]
+    (s,) = aggregate.daily_stats(rows)
+    assert s.n_samples == 3 and s.mean == 20.0 and s.units == "µg/m³"
+    assert aggregate.same_units("ug/m3", "µg/m³") and not aggregate.same_units("ppm", "µg/m³")
