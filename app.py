@@ -89,12 +89,19 @@ def api_month(lid: int, year: int, month: int):
         rows.extend(day_rows)
         rejected += day_rejected
     stats = [s for s in aggregate.daily_stats(rows) if s.parameter == param]
+    n_other_units = 0
+    if st is not None:
+        # A threshold in one unit must never be compared with values in another.
+        matching = [s for s in stats if aggregate.same_units(s.units, st["units"])]
+        n_other_units = len(stats) - len(matching)
+        stats = matching
     out = {
         "location_id": lid, "year": year, "month": month, "parameter": param,
         "days": [s.__dict__ for s in stats],
         "n_days": len(stats),
         # all parameters in the month files, not only the requested one
         "n_rejected_rows": rejected,
+        "n_days_other_units": n_other_units,
     }
     out["n_suspect"] = sum(1 for s in stats if s.suspect)
     if st is not None:
