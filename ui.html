@@ -196,6 +196,7 @@ async function loadMonth(lid) {
     `${d.standard.threshold} ${d.standard.units} (${esc(d.standard.label)}) among ` +
     `${d.n_valid_days} days with ≥2/3 coverage` +
     (thin ? ` · ${thin} thin day(s) excluded from exceedance counting` : '') +
+    (d.n_days_other_units ? ` · <b style="color:var(--amber)">${d.n_days_other_units} day-series in other units left out: they cannot be compared with ${esc(d.standard.units)}</b>` : '') +
     (d.n_rejected_rows ? ` · <b style="color:var(--amber)">${d.n_rejected_rows} archive row(s) rejected as invalid (all parameters this month); sample counts may be understated</b>` : '') +
     (d.n_suspect ? ` · <b style="color:var(--amber)">${d.n_suspect} suspect day(s): one constant reading all day - a stuck-sensor sign` +
      (d.n_suspect_exceedance ? ` (${d.n_suspect_exceedance} of them counted above the threshold)` : '') + '</b>' : '') +
