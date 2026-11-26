@@ -8,6 +8,7 @@ Run:  python app.py  ->  http://localhost:5000
 """
 import os
 from flask import Flask, jsonify, request, send_file
+from werkzeug.exceptions import HTTPException
 
 from openaq_explorer import aggregate, catalog, s3archive, standards
 
@@ -21,6 +22,19 @@ def _catalog():
     if not os.path.exists(CATALOG_PATH):
         return []
     return catalog.load_catalog(CATALOG_PATH)
+
+
+@app.errorhandler(Exception)
+def archive_failure(exc):
+    """Network, timeout or corrupt-file failures from the archive become a JSON
+    502 the UI can show, instead of an HTML 500 page. Other errors, including
+    HTTP errors raised by Flask itself, keep their normal handling."""
+    if request.path.startswith("/api/") and isinstance(exc, (OSError, EOFError, UnicodeDecodeError)):
+        return jsonify(error="The archive could not be read right now. "
+                             "Try again; no partial month is shown."), 502
+    if isinstance(exc, HTTPException):
+        return exc
+    raise exc
 
 
 @app.get("/")
