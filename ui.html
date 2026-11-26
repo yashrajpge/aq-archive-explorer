@@ -135,6 +135,11 @@ async function loadStations(q) {
         ${s.lat.toFixed(3)}, ${s.lon.toFixed(3)}</div>
     </div>`).join('');
 }
+// Parse a JSON reply; a non-JSON error page becomes a readable message.
+async function readJson(response) {
+  try { return await response.json(); }
+  catch (e) { return { error: `The server returned an unreadable reply (HTTP ${response.status}).` }; }
+}
 function esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 
 let monthRequest = 0;
@@ -149,7 +154,12 @@ async function openStation(i) {
   $('dCov').textContent = 'Checking live archive coverage…';
   $('dTable').style.display = 'none';
   $('dSum').textContent = '';
-  const cov = await (await fetch(`/api/station/${s.location_id}/coverage`)).json();
+  const covResponse = await fetch(`/api/station/${s.location_id}/coverage`);
+  const cov = await readJson(covResponse);
+  if (!covResponse.ok) {
+    $('dCov').textContent = cov.error || 'Could not read archive coverage.';
+    return;
+  }
   $('dCov').innerHTML = `<b>Archive coverage: ${cov.window}</b> (${cov.n_months} months with records)`;
   $('dMonth').innerHTML = cov.months.slice().reverse()
     .map(m => `<option>${m}</option>`).join('');
@@ -181,7 +191,7 @@ async function loadMonth(lid) {
   $('dSum').textContent = 'Fetching daily records from the archive (this reads ~30 files)…';
   const response = await fetch(
     `/api/station/${lid}/month/${y}/${m}?parameter=${encodeURIComponent(param)}&standard=${encodeURIComponent(stdKey)}`);
-  const d = await response.json();
+  const d = await readJson(response);
   if (currentRequest !== monthRequest) return;
   if (!response.ok) {
     $('dSum').textContent = d.error || 'Could not load this month.';
@@ -271,7 +281,9 @@ async function boot() {
   let i = stations.findIndex(s => s.location_id === lid);
   if (i < 0) {
     // not in the catalog sample: fetch coverage directly and synthesize a card
-    const cov = await (await fetch(`/api/station/${lid}/coverage`)).json();
+    const covResponse = await fetch(`/api/station/${lid}/coverage`);
+    const cov = await readJson(covResponse);
+    if (!covResponse.ok) { $('status').textContent = cov.error || `Could not read location ${lid}.`; return; }
     if (!cov.n_months) { $('status').textContent = `No archive records for location ${lid}.`; return; }
     stations.push({location_id: lid, name: `Location ${lid}`, station: `Location ${lid}`,
       city: '', provider: '', lat: 0, lon: 0, parameters: ['pm25'],
