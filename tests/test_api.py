@@ -82,3 +82,23 @@ def test_other_unit_series_excluded_from_standard_comparison(client, monkeypatch
     assert r["n_days_other_units"] == 1 and r["n_exceedance"] == 0
     plain = client.get("/api/station/1/month/2025/3?parameter=pm25").json
     assert plain["n_days"] == 2 and plain["n_days_other_units"] == 0
+
+
+@pytest.mark.parametrize("exc", [
+    OSError("connection reset"), TimeoutError("slow"), EOFError("truncated gzip"),
+    UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad byte"),
+])
+def test_archive_failures_return_json_502(client, monkeypatch, exc):
+    def broken(*args):
+        raise exc
+    monkeypatch.setattr(web.s3archive, "fetch_day_counted", broken)
+    monkeypatch.setattr(web.s3archive, "get_coverage", broken)
+    for path in ("/api/station/1/month/2025/3?parameter=pm25", "/api/station/1/coverage"):
+        r = client.get(path)
+        assert r.status_code == 502 and r.is_json and r.json["error"]
+
+
+def test_non_archive_errors_keep_normal_handling(client):
+    assert client.get("/api/nope").status_code == 404
+    assert client.get("/api/station/x/coverage").status_code == 404
+    assert client.get("/api/station/1/month/2025/13?parameter=pm25").status_code == 400
