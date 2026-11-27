@@ -14,9 +14,12 @@ Each day file is a gzipped CSV with columns:
 from __future__ import annotations
 
 import gzip
+import http.client
 import io
 import math
+import time
 from datetime import datetime
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -48,10 +51,31 @@ class Coverage:
         return f"{y1}-{m1:02d} through {y2}-{m2:02d}"
 
 
+RETRY_STATUS = {429, 500, 502, 503, 504}   # S3 answers 503 SlowDown under load
+ATTEMPTS = 3
+_sleep = time.sleep
+
+
 def _get(url: str, timeout: float = 30.0) -> bytes:
+    """GET with up to ATTEMPTS tries on transient failures (timeouts, dropped
+    connections, short reads, HTTP 429/5xx), backing off 0.5s then 1s. Other
+    HTTP errors, including 404, are raised at once. After the last try the
+    failure is raised as an OSError so callers see one error family."""
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    for attempt in range(ATTEMPTS):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            if e.code not in RETRY_STATUS or attempt == ATTEMPTS - 1:
+                raise
+        except (OSError, http.client.HTTPException) as e:
+            if attempt == ATTEMPTS - 1:
+                if isinstance(e, OSError):
+                    raise
+                raise ConnectionError(f"incomplete archive response: {e!r}") from e
+        _sleep(0.5 * 2 ** attempt)
+    raise AssertionError("unreachable")
 
 
 def list_months(location_id: int) -> list[tuple[int, int]]:
