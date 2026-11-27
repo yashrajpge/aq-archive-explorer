@@ -69,7 +69,7 @@ python app.py          # http://localhost:5000
 Tests (no network needed):
 
 ```bash
-python -m pytest tests/ -q     # 62 tests
+python -m pytest tests/ -q     # 73 tests
 ```
 
 Regenerate or enlarge the station catalog (reads only the keyless archive):
@@ -122,6 +122,10 @@ Daily statistics are grouped by units, so values in different units are never
 averaged together. With a reference level selected, only series in that level's
 unit (any spelling of µg/m³) are compared; the month API reports the number of
 day-series left out as `n_days_other_units`.
+
+Archive requests are tried up to three times (0.5 s, then 1 s apart) on timeouts,
+dropped connections, short reads and HTTP 429/5xx; 404 means no data and other
+HTTP errors are not retried.
 
 If the archive cannot be read (network error, timeout, truncated or undecodable
 file), the API answers with a JSON 502 and the UI shows the message; a month is
