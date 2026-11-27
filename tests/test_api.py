@@ -86,7 +86,7 @@ def test_other_unit_series_excluded_from_standard_comparison(client, monkeypatch
 
 @pytest.mark.parametrize("exc", [
     OSError("connection reset"), TimeoutError("slow"), EOFError("truncated gzip"),
-    UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad byte"),
+    UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad byte"), __import__("zlib").error("bad data"),
 ])
 def test_archive_failures_return_json_502(client, monkeypatch, exc):
     def broken(*args):
