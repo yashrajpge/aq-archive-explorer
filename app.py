@@ -7,6 +7,7 @@ the archive's actual coverage window, never a 'live' claim).
 Run:  python app.py  ->  http://localhost:5000
 """
 import os
+import zlib
 from flask import Flask, jsonify, request, send_file
 from werkzeug.exceptions import HTTPException
 
@@ -29,7 +30,7 @@ def archive_failure(exc):
     """Network, timeout or corrupt-file failures from the archive become a JSON
     502 the UI can show, instead of an HTML 500 page. Other errors, including
     HTTP errors raised by Flask itself, keep their normal handling."""
-    if request.path.startswith("/api/") and isinstance(exc, (OSError, EOFError, UnicodeDecodeError)):
+    if request.path.startswith("/api/") and isinstance(exc, (OSError, EOFError, UnicodeDecodeError, zlib.error)):
         return jsonify(error="The archive could not be read right now. "
                              "Try again; no partial month is shown."), 502
     if isinstance(exc, HTTPException):
