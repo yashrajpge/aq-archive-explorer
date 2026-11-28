@@ -133,6 +133,35 @@ def fetch_day_counted(location_id: int, year: int, month: int, day: int) -> tupl
     return parse_day_csv_counted(text)
 
 
+MONTH_WORKERS = 6   # bounded: polite to the public bucket, ~6x fewer serial waits
+
+
+def fetch_month_counted(location_id: int, year: int, month: int,
+                        workers: int = MONTH_WORKERS) -> tuple[list[dict], int]:
+    """Fetch every day file of a month concurrently.
+
+    Returns (rows in calendar-day order, total rejected rows). All-or-nothing:
+    the first failure cancels the files not yet started and is raised, so a
+    partial month is never returned.
+    """
+    import calendar
+    from concurrent.futures import ThreadPoolExecutor
+    days = range(1, calendar.monthrange(year, month)[1] + 1)
+    rows, rejected = [], 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [pool.submit(fetch_day_counted, location_id, year, month, d) for d in days]
+        try:
+            for f in futures:
+                day_rows, day_rejected = f.result()
+                rows.extend(day_rows)
+                rejected += day_rejected
+        except BaseException:
+            for f in futures:
+                f.cancel()
+            raise
+    return rows, rejected
+
+
 def parse_day_csv(text: str) -> list[dict]:
     """Valid rows only; see parse_day_csv_counted."""
     return parse_day_csv_counted(text)[0]
